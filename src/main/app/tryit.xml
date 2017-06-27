@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:dw="http://www.mulesoft.org/schema/mule/ee/dw" xmlns:metadata="http://www.mulesoft.org/schema/mule/metadata" xmlns:wmq="http://www.mulesoft.org/schema/mule/ee/wmq" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:spring="http://www.springframework.org/schema/beans" 
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-current.xsd
+http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/wmq http://www.mulesoft.org/schema/mule/ee/wmq/current/mule-wmq-ee.xsd
+http://www.mulesoft.org/schema/mule/ee/dw http://www.mulesoft.org/schema/mule/ee/dw/current/dw.xsd">
+    <asynchronous-processing-strategy name="Asynchronous_Processing_Strategy" doc:name="Asynchronous Processing Strategy"/>
+    <db:mysql-config name="MySQL_Configuration" host="${db.host}" port="${db.port}" user="${db.user}" password="${db.password}" database="${db.database}?useSSl=false" doc:name="MySQL Configuration"/>
+    <sub-flow name="datasensevariable">
+        <set-variable variableName="name" value="#[message.inboundProperties.'http.query.params'.['name']]" doc:name="name"/>
+        <set-session-variable variableName="status" value="#[message.inboundProperties.'http.query.params'.['status']]" doc:name="status"/>
+    </sub-flow>
+    <sub-flow name="asyncsubflow">
+        <async processingStrategy="Asynchronous_Processing_Strategy" doc:name="Async">
+            <db:insert config-ref="MySQL_Configuration" doc:name="Database">
+                <db:parameterized-query><![CDATA[insert into myinfo(name,status) values(#[flowVars.name], #[sessionVars.status]);]]></db:parameterized-query>
+            </db:insert>
+            <logger message="Data entered into database #[payload] row updated" level="INFO" doc:name="Logger"/>
+            <db:select config-ref="MySQL_Configuration" doc:name="Database">
+                <db:parameterized-query><![CDATA[select count(*) from myinfo;]]></db:parameterized-query>
+            </db:select>
+            <set-session-variable variableName="count" value="#[payload]" doc:name="count_var"/>
+            <logger message="no. of rows updated:::#[sessionVars.count]" level="INFO" doc:name="Logger"/>
+        </async>
+    </sub-flow>
+    <flow name="tryitFlow">
+        <http:listener config-ref="HTTP_Listener_Configuration" path="/go" doc:name="HTTP"/>
+        <logger message="out of http" level="INFO" doc:name="Listener_success"/>
+        <flow-ref name="datasensevariable" doc:name="datasensevariable"/>
+        <logger message="Name: #[flowVars.name]  and Status: #[sessionVars.status]" level="INFO" doc:name="variable_output"/>
+        <set-payload value="#[flowVars.name]      #[sessionVars.status]" doc:name="Set Payload"/>
+        <logger message="entering into Async................!!!!!!!!!!!!!!!!!" level="INFO" doc:name="Running_smoothly"/>
+        <flow-ref name="asyncsubflow" doc:name="asyncsubflow"/>
+        <logger message="The Result is Out" level="INFO" doc:name="Finally"/>
+    </flow>
+</mule>
